@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Orbital Mechanics Simulator</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@300;500&display=swap');
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000510;
+            font-family: 'Exo 2', sans-serif;
+        }
+        canvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+        .ui-container {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            z-index: 10;
+            background: rgba(0, 5, 16, 0.7);
+            border: 1px solid rgba(0, 122, 255, 0.5);
+            border-radius: 10px;
+            padding: 15px;
+            color: #e0e0e0;
+            backdrop-filter: blur(5px);
+            width: 300px;
+        }
+        .ui-container h1 {
+            margin: 0 0 15px 0;
+            font-size: 1.5rem;
+            font-weight: 500;
+            color: #00aaff;
+            text-align: center;
+        }
+        .control-group {
+            margin-bottom: 12px;
+        }
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 0.9rem;
+        }
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+        }
+        .button-group {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 15px;
+        }
+        .button-group button {
+            padding: 8px 12px;
+            border: 1px solid #00aaff;
+            background: transparent;
+            color: #00aaff;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.2s, color 0.2s;
+            font-family: 'Exo 2', sans-serif;
+        }
+        .button-group button:hover {
+            background-color: #00aaff;
+            color: #000510;
+        }
+        .instructions {
+            position: absolute;
+            bottom: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 0.8rem;
+            text-align: center;
+            z-index: 5;
+        }
+        /* NEW: AI Generator Styles */
+        .ai-generator {
+            margin-top: 20px;
+            border-top: 1px solid rgba(0, 122, 255, 0.3);
+            padding-top: 15px;
+        }
+        .ai-generator h2 {
+            margin: 0 0 10px 0;
+            font-size: 1.2rem;
+            font-weight: 500;
+            color: #9f80ff;
+        }
+        .ai-generator input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(0, 122, 255, 0.5);
+            color: white;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+        .ai-generator button {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #9f80ff;
+            background: transparent;
+            color: #9f80ff;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.2s, color 0.2s;
+            font-family: 'Exo 2', sans-serif;
+            position: relative;
+        }
+        .ai-generator button:hover {
+            background-color: #9f80ff;
+            color: #000510;
+        }
+        .loader {
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #9f80ff;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 1s linear infinite;
+            display: none; /* Hidden by default */
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+        @keyframes spin {
+            0% { transform: translateY(-50%) rotate(0deg); }
+            100% { transform: translateY(-50%) rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="simulationCanvas"></canvas>
+    
+    <div class="ui-container">
+        <h1>Controls</h1>
+        <div class="control-group">
+            <label for="gravitySlider">Gravity: <span id="gravityValue">0.5</span></label>
+            <input type="range" id="gravitySlider" min="0" max="2" step="0.05" value="0.5">
+        </div>
+        <div class="control-group">
+            <label for="trailSlider">Trail Length: <span id="trailValue">0.95</span></label>
+            <input type="range" id="trailSlider" min="0.5" max="0.99" step="0.01" value="0.95">
+        </div>
+        <div class="button-group">
+            <button id="pauseBtn">Pause</button>
+            <button id="resetBtn">Reset</button>
+        </div>
+        
+        <!-- NEW: AI Generator UI -->
+        <div class="ai-generator">
+            <h2>✨ AI System Generator</h2>
+            <input type="text" id="aiPrompt" placeholder="e.g., A chaotic binary star system">
+            <button id="aiGenerateBtn">
+                Generate with AI
+                <div class="loader" id="loader"></div>
+            </button>
+        </div>
+    </div>
+
+    <div class="instructions">
+        Click & Drag to launch planets. Hold Shift to attract.
+    </div>
+
+    <script>
+        const canvas = document.getElementById('simulationCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        // --- UI Elements ---
+        const gravitySlider = document.getElementById('gravitySlider');
+        const trailSlider = document.getElementById('trailSlider');
+        const pauseBtn = document.getElementById('pauseBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const gravityValueSpan = document.getElementById('gravityValue');
+        const trailValueSpan = document.getElementById('trailValue');
+        const aiPromptInput = document.getElementById('aiPrompt');
+        const aiGenerateBtn = document.getElementById('aiGenerateBtn');
+        const loader = document.getElementById('loader');
+
+        // --- Simulation State ---
+        let bodies = [];
+        let G = 0.5;
+        let isPaused = false;
+        let isShiftDown = false;
+        let mouse = { x: null, y: null, radius: 150 };
+        let launchStart = null;
+        let backgroundColor = '#000510';
+
+        // --- Celestial Body Class ---
+        class CelestialBody {
+            constructor(x, y, radius, color, mass, vx = 0, vy = 0, isSun = false) {
+                this.x = x; this.y = y;
+                this.radius = radius; this.color = color; this.mass = mass;
+                this.vx = vx; this.vy = vy;
+                this.isSun = isSun;
+            }
+            draw() { /* ... (same as before) ... */ }
+            update(bodies, isShiftDown) { /* ... (same as before) ... */ }
+        }
+
+        // --- Initialization ---
+        function init(systemData = null) {
+            bodies = [];
+            if (systemData) {
+                // Load system from AI data
+                backgroundColor = systemData.backgroundColor;
+                systemData.suns.forEach(sunData => {
+                    bodies.push(new CelestialBody(
+                        canvas.width * sunData.x, canvas.height * sunData.y,
+                        sunData.radius, sunData.color, sunData.mass, 0, 0, true
+                    ));
+                });
+                systemData.planets.forEach(planetData => {
+                    bodies.push(new CelestialBody(
+                        canvas.width * planetData.x, canvas.height * planetData.y,
+                        planetData.radius, planetData.color, planetData.mass,
+                        planetData.vx, planetData.vy, false
+                    ));
+                });
+            } else {
+                // Default system
+                backgroundColor = '#000510';
+                const sun = new CelestialBody(canvas.width / 2, canvas.height / 2, 25, '#ffd700', 10000, 0, 0, true);
+                bodies.push(sun);
+            }
+        }
+
+        // --- Gemini API Integration ---
+        async function generateSystemWithAI() {
+            const userPrompt = aiPromptInput.value;
+            if (!userPrompt) {
+                alert("Please enter a description for the solar system.");
+                return;
+            }
+
+            loader.style.display = 'block';
+            aiGenerateBtn.disabled = true;
+
+            const apiPrompt = `You are a solar system generator for a physics simulation. Based on the user's prompt, create a JSON object representing a solar system. The user wants: "${userPrompt}".
+
+            The JSON object must follow this exact schema. Do not add any extra explanations.
+            - Positions (x, y) are normalized from 0.0 to 1.0.
+            - Velocities (vx, vy) are small numbers, usually between -2 and 2.
+            - Mass and radius should be appropriate for planets and suns. Suns are much more massive.
+            - Ensure the generated system is interesting and reflects the user's prompt.
+            - The background color should be a hex string.`;
+            
+            const schema = {
+                type: "OBJECT",
+                properties: {
+                    "backgroundColor": { "type": "STRING" },
+                    "suns": {
+                        "type": "ARRAY",
+                        "items": {
+                            "type": "OBJECT",
+                            "properties": {
+                                "x": { "type": "NUMBER" }, "y": { "type": "NUMBER" },
+                                "radius": { "type": "NUMBER" }, "color": { "type": "STRING" },
+                                "mass": { "type": "NUMBER" }
+                            }
+                        }
+                    },
+                    "planets": {
+                        "type": "ARRAY",
+                        "items": {
+                            "type": "OBJECT",
+                            "properties": {
+                                "x": { "type": "NUMBER" }, "y": { "type": "NUMBER" },
+                                "radius": { "type": "NUMBER" }, "color": { "type": "STRING" },
+                                "mass": { "type": "NUMBER" }, "vx": { "type": "NUMBER" },
+                                "vy": { "type": "NUMBER" }
+                            }
+                        }
+                    }
+                }
+            };
+
+            try {
+                const payload = {
+                    contents: [{ role: "user", parts: [{ text: apiPrompt }] }],
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        responseSchema: schema
+                    }
+                };
+                const apiKey = "";
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+                
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API request failed with status ${response.status}`);
+                }
+                
+                const result = await response.json();
+                const jsonText = result.candidates[0].content.parts[0].text;
+                const systemData = JSON.parse(jsonText);
+                
+                init(systemData);
+
+            } catch (error) {
+                console.error("Error generating system with AI:", error);
+                alert("Sorry, something went wrong while generating the system. Please try a different prompt.");
+            } finally {
+                loader.style.display = 'none';
+                aiGenerateBtn.disabled = false;
+            }
+        }
+
+
+        // --- Main Animation Loop ---
+        function animate() {
+            if (!isPaused) {
+                // Use the dynamic background color
+                const trailValue = parseFloat(trailSlider.value);
+                const rgb = parseInt(backgroundColor.slice(1), 16);
+                const r = (rgb >> 16) & 0xff;
+                const g = (rgb >> 8) & 0xff;
+                const b = (rgb >> 0) & 0xff;
+                ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${1 - trailValue})`;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // ... (rest of the animate function is the same)
+                for (let i = 0; i < bodies.length; i++) {
+                    for (let j = i + 1; j < bodies.length; j++) {
+                        const a = bodies[i]; const b = bodies[j];
+                        const dx = b.x - a.x; const dy = b.y - a.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        if (dist < a.radius + b.radius) {
+                            const newVx = (a.mass * a.vx + b.mass * b.vx) / (a.mass + b.mass);
+                            const newVy = (a.mass * a.vy + b.mass * b.vy) / (a.mass + b.mass);
+                            a.mass += b.mass;
+                            a.radius = Math.pow(a.mass, 1/3);
+                            a.vx = newVx; a.vy = newVy;
+                            bodies.splice(j, 1);
+                            j--;
+                        }
+                    }
+                }
+                for (const body of bodies) {
+                    body.update(bodies, isShiftDown);
+                    body.draw();
+                }
+                if (launchStart) {
+                    ctx.beginPath();
+                    ctx.moveTo(launchStart.x, launchStart.y);
+                    ctx.lineTo(mouse.x, mouse.y);
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+                    ctx.setLineDash([5, 5]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+            }
+            requestAnimationFrame(animate);
+        }
+
+        // --- Event Listeners ---
+        aiGenerateBtn.addEventListener('click', generateSystemWithAI);
+        gravitySlider.addEventListener('input', (e) => { G = parseFloat(e.target.value); gravityValueSpan.textContent = G.toFixed(2); });
+        trailSlider.addEventListener('input', (e) => { trailValueSpan.textContent = e.target.value; });
+        pauseBtn.addEventListener('click', () => { isPaused = !isPaused; pauseBtn.textContent = isPaused ? 'Play' : 'Pause'; });
+        resetBtn.addEventListener('click', () => init(null));
+        canvas.addEventListener('mousedown', (e) => { launchStart = { x: e.clientX, y: e.clientY }; });
+        canvas.addEventListener('mouseup', (e) => {
+            if (!launchStart) return;
+            const vx = (e.clientX - launchStart.x) * 0.05;
+            const vy = (e.clientY - launchStart.y) * 0.05;
+            const radius = Math.random() * 5 + 3;
+            const mass = Math.pow(radius, 3);
+            const color = `hsl(${Math.random() * 360}, 100%, 75%)`;
+            bodies.push(new CelestialBody(launchStart.x, launchStart.y, radius, color, mass, vx, vy));
+            launchStart = null;
+        });
+        window.addEventListener('mousemove', (e) => { mouse.x = e.clientX; mouse.y = e.clientY; isShiftDown = e.shiftKey; });
+        window.addEventListener('keydown', (e) => { if (e.key === 'Shift') isShiftDown = true; });
+        window.addEventListener('keyup', (e) => { if (e.key === 'Shift') isShiftDown = false; });
+        window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; init(); });
+
+        // --- Start ---
+        init();
+        animate();
+
+        // --- Class Definitions (to keep them in scope) ---
+        CelestialBody.prototype.draw = function() {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fillStyle = this.color;
+            ctx.shadowBlur = this.isSun ? 30 : 15;
+            ctx.shadowColor = this.color;
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        };
+        CelestialBody.prototype.update = function(bodies, isShiftDown) {
+            for (const otherBody of bodies) {
+                if (this === otherBody) continue;
+                const dx = otherBody.x - this.x; const dy = otherBody.y - this.y;
+                const distSq = dx * dx + dy * dy;
+                if (distSq < 1) continue; // Avoid division by zero
+                const forceMag = (G * this.mass * otherBody.mass) / distSq;
+                const forceX = forceMag * dx / Math.sqrt(distSq);
+                const forceY = forceMag * dy / Math.sqrt(distSq);
+                this.vx += forceX / this.mass; this.vy += forceY / this.mass;
+            }
+            if (mouse.x !== null) {
+                const mdx = this.x - mouse.x; const mdy = this.y - mouse.y;
+                const mDist = Math.sqrt(mdx * mdx + mdy * mdy);
+                if (mDist < mouse.radius && !this.isSun) {
+                    const forceDirection = isShiftDown ? -1 : 1;
+                    const force = (1 - mDist / mouse.radius) * 0.5;
+                    this.vx += forceDirection * mdx / mDist * force;
+                    this.vy += forceDirection * mdy / mDist * force;
+                }
+            }
+            if (!this.isSun) {
+                this.x += this.vx; this.y += this.vy;
+            }
+        };
+    </script>
+</body>
+</html>
